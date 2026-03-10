@@ -1,14 +1,15 @@
 #pragma once
-#include"common.hpp"
 #include<cppp/bytearray.hpp>
+#include<cppp/int.hpp>
 #include<type_traits>
 #include<algorithm>
 #include<stdexcept>
+#include<utility>
 #include<cstdint>
 namespace x86{
-    using namespace asm_generic;
+    using namespace cppp::literals;
     using cppp::bytes;
-    enum class width{
+    enum class width : std::uint8_t{
         BYTE = 0, WORD = 1, DWORD = 2, QWORD = 3,
         W8 = 0, W16 = 1, W32 = 2, W64 = 3
     };
@@ -16,11 +17,10 @@ namespace x86{
         return w==width::W8?1:w==width::W16?2:w==width::W32?4:8;
     }
     constexpr inline std::byte pack_width(width w){
-        return w==width::W8?0_b:w==width::W16?1_b:w==width::W32?2_b:3_b;
+        return std::byte{std::to_underlying(w)};
     }
     constexpr inline width unpack_width(std::byte b){
-        [[assume(b==0_b||b==1_b||b==2_b||b==3_b)]];
-        return b==0_b?width::W8:b==1_b?width::W16:b==2_b?width::W32:width::W64;
+        return static_cast<width>(b);
     }
     enum class scale : std::uint8_t{
         S1 = 0, S2 = 1, S4 = 2, S8 = 3
