@@ -1,4 +1,4 @@
-COMPOPT := -std=c++26 -flto -fuse-linker-plugin -Wall -Wextra -Wpedantic -m64 -O3 -I"src" $(cppinclude)
+COMPOPT := -std=c++26 -flto -fuse-linker-plugin -Wall -Wextra -Wpedantic -m64 -O3 -I"src" -I$(cppinclude)
 FINALOPT := $(COMPOPT) -s -static
 HEADERS := $(wildcard *.hpp)
 ifeq ($(OS),"Windows_NT")

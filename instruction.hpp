@@ -60,98 +60,194 @@ namespace x86{
         constexpr inline std::byte R = 0b0100_b;
         constexpr inline std::byte W = 0b1000_b;
     }
-    template<std::byte rexb,std::byte ...b>
-    struct opcode{};
-    template<std::byte ...b>
-    using opcode_nr = opcode<0_b,b...>;
-    template<std::byte b>
-    struct prefix{};
-    template<width w>
-    struct immediate{};
-    constexpr static std::byte MODRM_R_DST = 0xff_b;
-    constexpr static std::byte MODRM_R_SRC = 0xfe_b;
-    template<std::byte rmreg>
-    struct modrm{};
-    
-    // Not an InstructionEncoding component! used for deduction when calling encode
-    template<width w>
-    struct displacement{
-        wvs<w> amount;
-    };
-
-    template<typename ...Components>
-    struct InstructionEncoding{
-        static void encode(bytes&){}
-    };
-    template<std::byte rexb,std::byte ...op,typename ...Rest>
-    struct InstructionEncoding<opcode<rexb,op...>,Rest...> : InstructionEncoding<Rest...>{
+    namespace detail{
         template<typename ...T>
-        static void encode(bytes& b,T&& ...v){
+        struct pack{};
+        template<typename T,typename U>
+        struct pack_concat{};
+        template<typename ...Ts,typename ...Us>
+        struct pack_concat<pack<Ts...>,pack<Us...>>{
+            using type = pack<Ts...,Us...>;
+        };
+        template<typename T,typename U>
+        using pack_concat_t = pack_concat<T,U>::type;
+        template<typename ...T>
+        struct pack_concat_n{
+            using type = pack<>;
+        };
+        template<typename P,typename ...T>
+        struct pack_concat_n<P,T...>{
+            using type = pack_concat_t<P,typename pack_concat_n<T...>::type>;
+        };
+        template<typename ...T>
+        using pack_concat_n_t = pack_concat_n<T...>::type;
+        template<typename T,template<typename,typename> typename Op,typename U>
+        struct pack_apply2{};
+        template<typename ...Ts,template<typename,typename> typename Op,typename U>
+        struct pack_apply2<pack<Ts...>,Op,U>{
+            using type = pack<typename Op<Ts,U>::type...>;
+        };
+        template<typename T,template<typename,typename> typename Op,typename U>
+        using pack_apply2_t = pack_apply2<T,Op,U>::type;
+        template<typename T,typename U,template<typename,typename> typename Op>
+        struct outer_product{};
+        template<typename T,typename ...Us,template<typename,typename> typename Op>
+        struct outer_product<T,pack<Us...>,Op>{
+            using type = pack_concat_n_t<pack_apply2_t<T,Op,Us>...>;
+        };
+        template<typename T,typename U,template<typename,typename> typename Op>
+        using outer_product_t = outer_product<T,U,Op>::type;
+    }
+    template<std::byte rexb,std::byte ...op>
+    struct opcode{
+        using overloads = detail::pack<detail::pack<>>;
+        static void encode(bytes& b){
             if constexpr(rexb != 0_b){
                 b.append(rexb | 0b0100'0000_b);
             }
             (..., b.append(op));
-            InstructionEncoding<Rest...>::encode(b,std::forward<T>(v)...);
         }
     };
-    template<std::byte mp,typename ...Rest>
-    struct InstructionEncoding<prefix<mp>,Rest...> : InstructionEncoding<Rest...>{
-        template<typename ...T>
-        static void encode(bytes& b,T&& ...v){
-            b.append(mp);
-            InstructionEncoding<Rest...>::encode(b,std::forward<T>(v)...);
+    template<std::byte ...b>
+    using opcode_nr = opcode<0_b,b...>;
+    template<std::byte pref>
+    struct prefix{
+        using overloads = detail::pack<detail::pack<>>;
+        static void encode(bytes& b){
+            b.append(pref);
         }
     };
-    template<width iw,typename ...Rest>
-    struct InstructionEncoding<immediate<iw>,Rest...> : InstructionEncoding<Rest...>{
-        template<typename ...T>
-        static void encode(bytes& b,wv<iw> imm,T&& ...v){
+    template<width w>
+    struct immediate{
+        using overloads = detail::pack<detail::pack<wv<w>>>;
+        static void encode(bytes& b,wv<w> imm){
             b.appendl(imm);
-            InstructionEncoding<Rest...>::encode(b,std::forward<T>(v)...);
         }
     };
-    template<std::byte rmreg,typename ...Rest>
-    struct InstructionEncoding<modrm<rmreg>,Rest...> : InstructionEncoding<Rest...>{
-        template<typename ...T>
-        static void encode(bytes& b,std::byte mod,std::byte rm,T&& ...v){
+    // Not an instruction component! used for overload resolution when encoding modrm
+    template<width w>
+    struct displacement{
+        wvs<w> amount;
+    };
+    constexpr static std::byte MODRM_R_DST = 0xff_b;
+    constexpr static std::byte MODRM_R_SRC = 0xfe_b;
+    namespace detail{
+        template<std::byte rmreg,width Dw>
+        struct modrm_with_disp{
+            static void encode(bytes& b,std::byte mod,std::byte rm,displacement<Dw> disp){
+                b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
+                b.appendl(disp.amount);
+            }
+        };
+        template<width Dw>
+        struct modrm_rdst_with_disp{
+            static void encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm,displacement<Dw> disp){
+                b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
+                b.appendl(disp.amount);
+            }
+        };
+        template<width Dw>
+        struct modrm_rsrc_with_disp{
+            static void encode(bytes& b,std::byte mod,std::byte rm,displacement<Dw> disp,std::byte rmreg){
+                b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
+                b.appendl(disp.amount);
+            }
+        };
+    }
+    template<std::byte rmreg>
+    struct modrm : detail::modrm_with_disp<rmreg,width::W8>,
+                   detail::modrm_with_disp<rmreg,width::W16>,
+                   detail::modrm_with_disp<rmreg,width::W32>,
+                   detail::modrm_with_disp<rmreg,width::W64>{
+        using overloads = detail::pack<
+            detail::pack<std::byte,std::byte>,
+            detail::pack<std::byte,std::byte,displacement<width::W8>>,
+            detail::pack<std::byte,std::byte,displacement<width::W16>>,
+            detail::pack<std::byte,std::byte,displacement<width::W32>>,
+            detail::pack<std::byte,std::byte,displacement<width::W64>>
+        >;
+        using detail::modrm_with_disp<rmreg,width::W8>::encode;
+        using detail::modrm_with_disp<rmreg,width::W16>::encode;
+        using detail::modrm_with_disp<rmreg,width::W32>::encode;
+        using detail::modrm_with_disp<rmreg,width::W64>::encode;
+        static void encode(bytes& b,std::byte mod,std::byte rm){
             b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
-            InstructionEncoding<Rest...>::encode(b,std::forward<T>(v)...);
-        }
-        template<width Dw,typename ...T>
-        static void encode(bytes& b,std::byte mod,std::byte rm,displacement<Dw> disp,T&& ...v){
-            b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
-            b.appendl(disp.amount);
-            InstructionEncoding<Rest...>::encode(b,std::forward<T>(v)...);
         }
     };
-    template<typename ...Rest>
-    struct InstructionEncoding<modrm<MODRM_R_DST>,Rest...> : InstructionEncoding<Rest...>{
-        template<typename ...T>
-        static void encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm,T&& ...v){
+    template<>
+    struct modrm<MODRM_R_DST> : detail::modrm_rdst_with_disp<width::W8>,
+                                detail::modrm_rdst_with_disp<width::W16>,
+                                detail::modrm_rdst_with_disp<width::W32>,
+                                detail::modrm_rdst_with_disp<width::W64>{
+        using overloads = detail::pack<
+            detail::pack<std::byte,std::byte,std::byte>,
+            detail::pack<std::byte,std::byte,std::byte,displacement<width::W8>>,
+            detail::pack<std::byte,std::byte,std::byte,displacement<width::W16>>,
+            detail::pack<std::byte,std::byte,std::byte,displacement<width::W32>>,
+            detail::pack<std::byte,std::byte,std::byte,displacement<width::W64>>
+        >;
+        using detail::modrm_rdst_with_disp<width::W8>::encode;
+        using detail::modrm_rdst_with_disp<width::W16>::encode;
+        using detail::modrm_rdst_with_disp<width::W32>::encode;
+        using detail::modrm_rdst_with_disp<width::W64>::encode;
+        static void encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm){
             b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
-            InstructionEncoding<Rest...>::encode(b,std::forward<T>(v)...);
-        }
-        template<width Dw,typename ...T>
-        static void encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm,displacement<Dw> disp,T&& ...v){
-            b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
-            b.appendl(disp.amount);
-            InstructionEncoding<Rest...>::encode(b,std::forward<T>(v)...);
-        }
-    };
-    template<typename ...Rest>
-    struct InstructionEncoding<modrm<MODRM_R_SRC>,Rest...> : InstructionEncoding<Rest...>{
-        template<typename ...T>
-        static void encode(bytes& b,std::byte mod,std::byte rm,std::byte rmreg,T&& ...v){
-            b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
-            InstructionEncoding<Rest...>::encode(b,std::forward<T>(v)...);
-        }
-        template<width Dw,typename ...T>
-        static void encode(bytes& b,std::byte mod,std::byte rm,displacement<Dw> disp,std::byte rmreg,T&& ...v){
-            b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
-            b.appendl(disp.amount);
-            InstructionEncoding<Rest...>::encode(b,std::forward<T>(v)...);
         }
     };
+    template<>
+    struct modrm<MODRM_R_SRC> : detail::modrm_rsrc_with_disp<width::W8>,
+                                detail::modrm_rsrc_with_disp<width::W16>,
+                                detail::modrm_rsrc_with_disp<width::W32>,
+                                detail::modrm_rsrc_with_disp<width::W64>{
+        using overloads = detail::pack<
+            detail::pack<std::byte,std::byte,std::byte>,
+            detail::pack<std::byte,std::byte,displacement<width::W8>,std::byte>,
+            detail::pack<std::byte,std::byte,displacement<width::W16>,std::byte>,
+            detail::pack<std::byte,std::byte,displacement<width::W32>,std::byte>,
+            detail::pack<std::byte,std::byte,displacement<width::W64>,std::byte>
+        >;
+        using detail::modrm_rsrc_with_disp<width::W8>::encode;
+        using detail::modrm_rsrc_with_disp<width::W16>::encode;
+        using detail::modrm_rsrc_with_disp<width::W32>::encode;
+        using detail::modrm_rsrc_with_disp<width::W64>::encode;
+        static void encode(bytes& b,std::byte mod,std::byte rm,std::byte rmreg){
+            b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
+        }
+    };
+    namespace detail{
+        template<typename Comp,typename Ol,typename Rest,typename RestOl>
+        struct encode_comp_sig{};
+        template<typename Comp,typename ...Argv,typename Rest,typename ...RestArgv>
+        struct encode_comp_sig<Comp,pack<Argv...>,Rest,pack<RestArgv...>>{
+            static void encode(bytes& b,Argv ...a,RestArgv ...r){
+                Comp::encode(b,static_cast<Argv>(a)...);
+                Rest::encode(b,static_cast<RestArgv>(r)...);
+            }
+        };
+        template<typename Comp,typename Olp,typename Rest,typename RestOl>
+        struct encode_comp_for_one_rol{};
+        template<typename Comp,typename ...Ols,typename Rest,typename RestOl>
+        struct encode_comp_for_one_rol<Comp,pack<Ols...>,Rest,RestOl> : encode_comp_sig<Comp,Ols,Rest,RestOl>...{
+            using typename encode_comp_sig<Comp,Ols,Rest,RestOl>::encode...;
+        };
+        template<typename Comp,typename Olp,typename Rest,typename RestOlp>
+        struct encode_comp{};
+        template<typename Comp,typename Olp,typename Rest,typename ...RestOls>
+        struct encode_comp<Comp,Olp,Rest,pack<RestOls...>> : encode_comp_for_one_rol<Comp,Olp,Rest,RestOls>...{
+            using typename encode_comp_for_one_rol<Comp,Olp,Rest,RestOls>::encode...;
+        };
+    }
+    
+    template<typename ...C>
+    struct InstructionEncoding{
+        using overloads = detail::pack<detail::pack<>>;
+        static void encode(bytes&){}
+    };
+    template<typename Comp,typename ...Rest>
+    struct InstructionEncoding<Comp,Rest...> : detail::encode_comp<Comp,typename Comp::overloads,InstructionEncoding<Rest...>,typename InstructionEncoding<Rest...>::overloads>{
+        using overloads = detail::outer_product_t<typename Comp::overloads,typename InstructionEncoding<Rest...>::overloads,detail::pack_concat>;
+    };
+
     namespace detail{
         template<width w,typename Ie8,typename Ie16,typename Ie32,typename Ie64>
         struct select_by_width{};
