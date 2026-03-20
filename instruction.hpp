@@ -27,7 +27,10 @@ namespace x86{
         std::conditional_t<
             w == width::WORD,
             std::uint16_t,
-            std::uint32_t
+            std::enable_if_t<
+            w == width::DWORD,
+                std::uint32_t
+            >
         >
     >;
     template<width w>
