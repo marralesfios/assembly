@@ -157,19 +157,16 @@ namespace x86{
     template<std::byte rmreg>
     struct modrm : detail::modrm_with_disp<rmreg,width::W8>,
                    detail::modrm_with_disp<rmreg,width::W16>,
-                   detail::modrm_with_disp<rmreg,width::W32>,
-                   detail::modrm_with_disp<rmreg,width::W64>{
+                   detail::modrm_with_disp<rmreg,width::W32>{
         using overloads = detail::pack<
             detail::pack<std::byte,std::byte>,
             detail::pack<std::byte,std::byte,displacement<width::W8>>,
             detail::pack<std::byte,std::byte,displacement<width::W16>>,
-            detail::pack<std::byte,std::byte,displacement<width::W32>>,
-            detail::pack<std::byte,std::byte,displacement<width::W64>>
+            detail::pack<std::byte,std::byte,displacement<width::W32>>
         >;
         using detail::modrm_with_disp<rmreg,width::W8>::encode;
         using detail::modrm_with_disp<rmreg,width::W16>::encode;
         using detail::modrm_with_disp<rmreg,width::W32>::encode;
-        using detail::modrm_with_disp<rmreg,width::W64>::encode;
         static void encode(bytes& b,std::byte mod,std::byte rm){
             b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
         }
