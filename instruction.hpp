@@ -371,6 +371,8 @@ namespace x86{
             using b = c;
             using z = InstructionEncoding<opcode_nr<0x0F_b,0x94_b>,modrm<0_b>>;
             using e = z;
+            using le = InstructionEncoding<opcode_nr<0x0F_b,0x9E_b>,modrm<0_b>>;
+            using ng = le;
         };
         struct movzx{
             using from_b = RegularInstructionEncodings<void,opcode_nr<0x0F_b,0xB6_b>,modrm<MODRM_R_DST>>;
