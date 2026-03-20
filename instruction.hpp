@@ -234,7 +234,7 @@ namespace x86{
         struct encode_comp{};
         template<typename Comp,typename Olp,typename Rest,typename ...RestOls>
         struct encode_comp<Comp,Olp,Rest,pack<RestOls...>> : encode_comp_for_one_rol<Comp,Olp,Rest,RestOls>...{
-            using typename encode_comp_for_one_rol<Comp,Olp,Rest,RestOls>::encode...;
+            using encode_comp_for_one_rol<Comp,Olp,Rest,RestOls>::encode...;
         };
     }
     
