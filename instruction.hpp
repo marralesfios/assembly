@@ -293,7 +293,7 @@ namespace x86{
         template<typename ...T>
         using reify_for_32 = InstructionEncoding<rie_reify_width_t<T,width::W32>...>;
         template<typename ...T>
-        using with_rexw = InstructionEncoding<insert_rex_prefix_t<rex::W,rie_reify_width_t<T,width::W64>>...>;
+        using with_rexw = InstructionEncoding<insert_rex_prefix_t<rex::W,rie_reify_width_t<T,width::W32>>...>;
     }
     template<typename Ie8,typename ...T>
     using RegularInstructionEncodings = InstructionEncodings<Ie8,detail::with_66h<T...>,detail::reify_for_32<T...>,detail::with_rexw<T...>>;
