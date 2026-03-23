@@ -174,19 +174,16 @@ namespace x86{
     template<>
     struct modrm<MODRM_R_DST> : detail::modrm_rdst_with_disp<width::W8>,
                                 detail::modrm_rdst_with_disp<width::W16>,
-                                detail::modrm_rdst_with_disp<width::W32>,
-                                detail::modrm_rdst_with_disp<width::W64>{
+                                detail::modrm_rdst_with_disp<width::W32>{
         using overloads = detail::pack<
             detail::pack<std::byte,std::byte,std::byte>,
             detail::pack<std::byte,std::byte,std::byte,displacement<width::W8>>,
             detail::pack<std::byte,std::byte,std::byte,displacement<width::W16>>,
-            detail::pack<std::byte,std::byte,std::byte,displacement<width::W32>>,
-            detail::pack<std::byte,std::byte,std::byte,displacement<width::W64>>
+            detail::pack<std::byte,std::byte,std::byte,displacement<width::W32>>
         >;
         using detail::modrm_rdst_with_disp<width::W8>::encode;
         using detail::modrm_rdst_with_disp<width::W16>::encode;
         using detail::modrm_rdst_with_disp<width::W32>::encode;
-        using detail::modrm_rdst_with_disp<width::W64>::encode;
         static void encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm){
             b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
         }
@@ -194,19 +191,16 @@ namespace x86{
     template<>
     struct modrm<MODRM_R_SRC> : detail::modrm_rsrc_with_disp<width::W8>,
                                 detail::modrm_rsrc_with_disp<width::W16>,
-                                detail::modrm_rsrc_with_disp<width::W32>,
-                                detail::modrm_rsrc_with_disp<width::W64>{
+                                detail::modrm_rsrc_with_disp<width::W32>{
         using overloads = detail::pack<
             detail::pack<std::byte,std::byte,std::byte>,
             detail::pack<std::byte,std::byte,displacement<width::W8>,std::byte>,
             detail::pack<std::byte,std::byte,displacement<width::W16>,std::byte>,
-            detail::pack<std::byte,std::byte,displacement<width::W32>,std::byte>,
-            detail::pack<std::byte,std::byte,displacement<width::W64>,std::byte>
+            detail::pack<std::byte,std::byte,displacement<width::W32>,std::byte>
         >;
         using detail::modrm_rsrc_with_disp<width::W8>::encode;
         using detail::modrm_rsrc_with_disp<width::W16>::encode;
         using detail::modrm_rsrc_with_disp<width::W32>::encode;
-        using detail::modrm_rsrc_with_disp<width::W64>::encode;
         static void encode(bytes& b,std::byte mod,std::byte rm,std::byte rmreg){
             b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
         }
