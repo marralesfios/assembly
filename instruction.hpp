@@ -206,26 +206,23 @@ namespace x86{
         }
     };
     namespace detail{
-        template<typename Comp,typename Ol,typename Rest,typename RestOl>
+        // not type_identity_t! we use type_identity so we are a struct with a ::type member instead of a typedef
+        template<typename T,typename U>
+        using tpair = std::type_identity<pack<T,U>>;
+        template<typename Comp,typename Rest,typename Packs>
         struct encode_comp_sig{};
-        template<typename Comp,typename ...Argv,typename Rest,typename ...RestArgv>
-        struct encode_comp_sig<Comp,pack<Argv...>,Rest,pack<RestArgv...>>{
+        template<typename Comp,typename Rest,typename ...Argv,typename ...RestArgv>
+        struct encode_comp_sig<Comp,Rest,pack<pack<Argv...>,pack<RestArgv...>>>{
             static void encode(bytes& b,Argv ...a,RestArgv ...r){
                 Comp::encode(b,static_cast<Argv>(a)...);
                 Rest::encode(b,static_cast<RestArgv>(r)...);
             }
         };
-        template<typename Comp,typename Olp,typename Rest,typename RestOl>
-        struct encode_comp_for_one_rol{};
-        template<typename Comp,typename ...Ols,typename Rest,typename RestOl>
-        struct encode_comp_for_one_rol<Comp,pack<Ols...>,Rest,RestOl> : encode_comp_sig<Comp,Ols,Rest,RestOl>...{
-            using encode_comp_sig<Comp,Ols,Rest,RestOl>::encode...;
-        };
-        template<typename Comp,typename Olp,typename Rest,typename RestOlp>
+        template<typename Comp,typename Rest,typename Combop>
         struct encode_comp{};
-        template<typename Comp,typename Olp,typename Rest,typename ...RestOls>
-        struct encode_comp<Comp,Olp,Rest,pack<RestOls...>> : encode_comp_for_one_rol<Comp,Olp,Rest,RestOls>...{
-            using encode_comp_for_one_rol<Comp,Olp,Rest,RestOls>::encode...;
+        template<typename Comp,typename Rest,typename ...Combos>
+        struct encode_comp<Comp,Rest,pack<Combos...>> : encode_comp_sig<Comp,Rest,Combos>...{
+            using encode_comp_sig<Comp,Rest,Combos>::encode...;
         };
     }
     
@@ -235,7 +232,7 @@ namespace x86{
         static void encode(bytes&){}
     };
     template<typename Comp,typename ...Rest>
-    struct InstructionEncoding<Comp,Rest...> : detail::encode_comp<Comp,typename Comp::overloads,InstructionEncoding<Rest...>,typename InstructionEncoding<Rest...>::overloads>{
+    struct InstructionEncoding<Comp,Rest...> : detail::encode_comp<Comp,InstructionEncoding<Rest...>,detail::outer_product_t<typename Comp::overloads,typename InstructionEncoding<Rest...>::overloads,detail::tpair>>{
         using overloads = detail::outer_product_t<typename Comp::overloads,typename InstructionEncoding<Rest...>::overloads,detail::pack_concat>;
     };
 
