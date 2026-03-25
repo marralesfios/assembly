@@ -21,20 +21,18 @@ namespace x86{
         S1 = 0, S2 = 1, S4 = 2, S8 = 3
     };
     template<width w>
-    using wvx = std::conditional_t<
+    using wv = std::conditional_t<
         w == width::BYTE,
         std::uint8_t,
         std::conditional_t<
             w == width::WORD,
             std::uint16_t,
-            std::uint32_t
+            std::conditional_t<
+                w == width::DWORD,
+                std::uint32_t,
+                std::enable_if_t<w == width::QWORD, std::uint64_t>
+            >
         >
-    >;
-    template<width w>
-    using wv = std::conditional_t<
-        w == width::QWORD,
-        std::uint64_t,
-        wvx<w>
     >;
     template<width w>
     using wvs = std::make_signed_t<wv<w>>;
