@@ -6,6 +6,6 @@ TARGET_SUFFIX := .exe
 else
 TARGET_SUFFIX :=
 endif
-test$(TARGET_SUFFIX): test.cpp
+test$(TARGET_SUFFIX): test.cpp instruction.hpp
 	g++ $< $(OBJECTS) -o $@ $(FINALOPT)
 %.o: %.cpp $(HEADERS)
