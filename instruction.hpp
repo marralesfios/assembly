@@ -30,7 +30,11 @@ namespace x86{
             std::conditional_t<
                 w == width::DWORD,
                 std::uint32_t,
-                std::enable_if_t<w == width::QWORD, std::uint64_t>
+                std::conditional_t<
+                    w == width::QWORD,
+                    std::uint64_t,
+                    void
+                >
             >
         >
     >;
