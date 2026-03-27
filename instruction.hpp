@@ -387,7 +387,7 @@ namespace x86{
         
         template<typename Subst,typename ...C>
         struct do_reify_for_8bit{
-            using type = InstructionEncoding<prefix<0x66_b>,subst_opcode_t<rie_reify_width_t<C,width::W8>,Subst>...>;
+            using type = InstructionEncoding<subst_opcode_t<rie_reify_width_t<C,width::W8>,Subst>...>;
         };
         template<typename ...C>
         struct do_reify_for_8bit<void,C...>{
