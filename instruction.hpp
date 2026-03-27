@@ -8,6 +8,9 @@
 #include<utility>
 #include<cstdint>
 namespace x86{
+    constexpr std::byte addb(std::byte u,std::byte v){
+        return static_cast<std::byte>(static_cast<std::uint8_t>(u)+static_cast<std::uint8_t>(v));
+    }
     using namespace cppp::literals;
     using cppp::bytes;
     enum class width : std::uint8_t{
@@ -149,6 +152,27 @@ namespace x86{
     };
     template<std::byte ...b>
     using opcode_nr = opcode<0_b,b...>;
+    template<std::byte rexb,std::byte op>
+    struct opcode_plusr{
+        using overloads = detail::pack<detail::pack<std::byte>>;
+        static detail::component_feedback<rexb==0_b?1uz:2uz> encode(bytes& b,std::byte r){
+            if constexpr(rexb != 0_b){
+                b.append(rexb | 0b0100'0000_b);
+            }
+            b.append(addb(op,r));
+            return {};
+        }
+    };
+    template<std::byte b>
+    using opcode_plusr_nr = opcode_plusr<0_b,b>;
+    template<std::byte ...op>
+    struct width_agnostic_opcode{
+        using overloads = detail::pack<detail::pack<>>;
+        static detail::component_feedback<sizeof...(op)> encode(bytes& b){
+            (..., b.append(op));
+            return {};
+        }
+    };
     template<std::byte pref>
     struct prefix{
         using overloads = detail::pack<detail::pack<>>;
@@ -296,6 +320,14 @@ namespace x86{
             return {};
         }
     };
+    template<typename T>
+    struct pred_is_modrm{
+        constexpr static bool value = false;
+    };
+    template<std::byte b>
+    struct pred_is_modrm<modrm<b>>{
+        constexpr static bool value = true;
+    };
     namespace detail{
         // not type_identity_t! we use type_identity so we are a struct with a ::type member instead of a typedef
         template<typename T,typename U>
@@ -352,6 +384,8 @@ namespace x86{
     struct rie_variable_width{};
     template<std::byte ...op>
     struct opcode_substitution{};
+    template<std::byte op>
+    struct plusr_opcode_substitution{};
     namespace detail{
         template<typename T,width w>
         struct rie_reify_width{
@@ -371,6 +405,10 @@ namespace x86{
         struct subst_opcode<opcode<rexb,op...>,opcode_substitution<newop...>>{
             using type = opcode<rexb,newop...>;
         };
+        template<std::byte rexb,std::byte op,std::byte newop>
+        struct subst_opcode<opcode_plusr<rexb,op>,plusr_opcode_substitution<newop>>{
+            using type = opcode_plusr<rexb,newop>;
+        };
         template<typename T,typename S>
         using subst_opcode_t = subst_opcode<T,S>::type;
         
@@ -381,6 +419,10 @@ namespace x86{
         template<std::byte rexb,std::byte existing_rexb,std::byte ...op>
         struct insert_rex_prefix<rexb,opcode<existing_rexb,op...>>{
             using type = opcode<rexb|existing_rexb,op...>;
+        };
+        template<std::byte rexb,std::byte existing_rexb,std::byte op>
+        struct insert_rex_prefix<rexb,opcode_plusr<existing_rexb,op>>{
+            using type = opcode_plusr<rexb|existing_rexb,op>;
         };
         template<std::byte rexb,typename T>
         using insert_rex_prefix_t = insert_rex_prefix<rexb,T>::type;
@@ -413,9 +455,6 @@ namespace x86{
     using RegularLongInstructionEncodings = InstructionEncodings<void,void,detail::reify_for_32bit<C...>,detail::reify_for_64bit<C...>>;
     namespace instructions{
         namespace detail{
-            constexpr std::byte addb(std::byte u,std::byte v){
-                return static_cast<std::byte>(static_cast<std::uint8_t>(u)+static_cast<std::uint8_t>(v));
-            }
             template<std::byte base>
             struct ins_rmr{
                 using rm_r = RegularInstructionEncodings<
@@ -441,7 +480,9 @@ namespace x86{
         struct add : detail::ins<0x00_b>, detail::ins_rmi<0x80_b,0_b>{};
         struct sub : detail::ins<0x28_b>, detail::ins_rmi<0x80_b,5_b>{};
         struct cmp : detail::ins<0x38_b>, detail::ins_rmi<0x80_b,7_b>{};
-        struct mov : detail::ins<0x88_b>, detail::ins_rmi<0xC6_b,0_b>{};
+        struct mov : detail::ins<0x88_b>, detail::ins_rmi<0xC6_b,0_b>{
+            using r_imm = RegularInstructionEncodings<plusr_opcode_substitution<0xB0_b>,opcode_plusr_nr<0xB8_b>,rie_variable_width<absolute_immediate>>;
+        };
         
         using lea = RegularInstructionEncodings<void,
             opcode_nr<0x8D_b>,modrm<MODRM_R_DST>
@@ -462,11 +503,11 @@ namespace x86{
         struct push : detail::pushpop<0xFF_b,6_b,0x50_b>{};
         struct pop : detail::pushpop<0x8F_b,0_b,0x58_b>{};
         struct call{
-            using rm = InstructionEncoding<opcode_nr<0xFF_b>,modrm<2_b>>;
             constexpr static void rel32(bytes& buf,std::uint32_t rel){
                 buf.append(0xE8_b);
                 buf.appendl(rel);
             }
+            using near_abs = RegularLongInstructionEncodings<width_agnostic_opcode<0xFF_b>,modrm<2_b>>;
         };
         struct ret{
             constexpr static void near(bytes& buf){
@@ -495,7 +536,7 @@ namespace x86{
         struct j{
             private:
                 template<std::byte base>
-                using generic = RegularShortInstructionEncodings<opcode_substitution<base>,opcode_nr<0x0F_b,detail::addb(base,0x10_b)>,rie_variable_width<signed_immediate>>;
+                using generic = RegularShortInstructionEncodings<opcode_substitution<base>,opcode_nr<0x0F_b,addb(base,0x10_b)>,rie_variable_width<signed_immediate>>;
             public:
                 using z = generic<0x74_b>;
                 using e = z;
