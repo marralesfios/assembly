@@ -103,46 +103,49 @@ namespace x86{
         template<typename T,typename U,template<typename,typename> typename Op>
         using outer_product_t = outer_product<T,U,Op>::type;
     }
-    namespace detail{
-        template<std::size_t n>
-        struct component_feedback{};
-    }
-    template<typename Comp,std::size_t n>
+    enum class ComponentType{
+        PREFIX,OPCODE,MODRM,IMMEDIATE,DISPLACEMENT
+    };
+    template<ComponentType t,std::size_t n>
     struct encoded_component{};
     namespace detail{
-        template<template<typename> typename Pred,typename ...Ec>
-        struct offset_of_first_of{};
-        template<template<typename> typename Pred,typename Comp,std::size_t size,typename ...Rest> requires(Pred<Comp>::value)
-        struct offset_of_first_of<Pred,encoded_component<Comp,size>,Rest...>{
+        template<ComponentType t,typename ...Ec>
+        struct offset_of_first{};
+        template<ComponentType t,std::size_t size,typename ...Rest>
+        struct offset_of_first<t,encoded_component<t,size>,Rest...>{
             constexpr static std::size_t value{0uz};
         };
-        template<template<typename> typename Pred,typename Comp,std::size_t size,typename ...Rest> requires(!Pred<Comp>::value)
-        struct offset_of_first_of<Pred,encoded_component<Comp,size>,Rest...>{
-            constexpr static std::size_t value{size + offset_of_first_of<Pred,Rest...>::value};
+        template<ComponentType t,ComponentType t2,std::size_t size,typename ...Rest>
+        struct offset_of_first<t,encoded_component<t2,size>,Rest...>{
+            constexpr static std::size_t value{size + offset_of_first<t,Rest...>::value};
         };
-        template<template<typename> typename Pred,typename ...Ec>
-        constexpr inline std::size_t offset_of_first_of_v = offset_of_first_of<Pred,Ec...>::value;
+        template<ComponentType t,typename ...Ec>
+        constexpr inline std::size_t offset_of_first_v = offset_of_first<t,Ec...>::value;
     }
     template<typename ...Ec>
     struct encode_feedback;
-    template<typename ...Comps,std::size_t ...sizes>
-    struct encode_feedback<encoded_component<Comps,sizes>...>{
+    template<ComponentType ...comps,std::size_t ...sizes>
+    struct encode_feedback<encoded_component<comps,sizes>...>{
         constexpr static std::size_t total_size = (... + sizes);
-        template<template<typename> typename Pred>
-        constexpr static std::size_t offset_of_first = detail::offset_of_first_of_v<Pred,encoded_component<Comps,sizes>...>;
+        template<ComponentType C>
+        constexpr static std::size_t offset_of_first = detail::offset_of_first_v<C,encoded_component<comps,sizes>...>;
     };
-    template<typename C,typename Cr,typename R>
-    struct encode_feedback_prepend{};
-    template<typename C,std::size_t Cn,typename ...Rs>
-    struct encode_feedback_prepend<C,detail::component_feedback<Cn>,encode_feedback<Rs...>>{
-        using type = encode_feedback<encoded_component<C,Cn>,Rs...>;
+    template<typename C,typename D>
+    struct encode_feedback_concat{};
+    template<typename ...Cs,typename ...Ds>
+    struct encode_feedback_concat<encode_feedback<Cs...>,encode_feedback<Ds...>>{
+        using type = encode_feedback<Cs...,Ds...>;
     };
-    template<typename C,typename Cr,typename R>
-    using encode_feedback_prepend_t = encode_feedback_prepend<C,Cr,R>::type;
+    template<typename C,typename D>
+    using encode_feedback_concat_t = encode_feedback_concat<C,D>::type;
+    namespace detail{
+        template<ComponentType t,std::size_t n>
+        using encode_feedback_single = encode_feedback<encoded_component<t,n>>;
+    }
     template<std::byte rexb,std::byte ...op>
     struct opcode{
         using overloads = detail::pack<detail::pack<>>;
-        static detail::component_feedback<(rexb==0_b?0uz:1uz)+sizeof...(op)> encode(bytes& b){
+        static detail::encode_feedback_single<ComponentType::OPCODE,(rexb==0_b?0uz:1uz)+sizeof...(op)> encode(bytes& b){
             if constexpr(rexb != 0_b){
                 b.append(rexb | 0b0100'0000_b);
             }
@@ -155,7 +158,7 @@ namespace x86{
     template<std::byte rexb,std::byte op>
     struct opcode_plusr{
         using overloads = detail::pack<detail::pack<std::byte>>;
-        static detail::component_feedback<rexb==0_b?1uz:2uz> encode(bytes& b,std::byte r){
+        static detail::encode_feedback_single<ComponentType::OPCODE,rexb==0_b?1uz:2uz> encode(bytes& b,std::byte r){
             if constexpr(rexb != 0_b){
                 b.append(rexb | 0b0100'0000_b);
             }
@@ -165,18 +168,10 @@ namespace x86{
     };
     template<std::byte b>
     using opcode_plusr_nr = opcode_plusr<0_b,b>;
-    template<std::byte ...op>
-    struct width_agnostic_opcode{
-        using overloads = detail::pack<detail::pack<>>;
-        static detail::component_feedback<sizeof...(op)> encode(bytes& b){
-            (..., b.append(op));
-            return {};
-        }
-    };
     template<std::byte pref>
     struct prefix{
         using overloads = detail::pack<detail::pack<>>;
-        static detail::component_feedback<1uz> encode(bytes& b){
+        static detail::encode_feedback_single<ComponentType::PREFIX,1uz> encode(bytes& b){
             b.append(pref);
             return {};
         }
@@ -189,24 +184,16 @@ namespace x86{
         template<typename T>
         struct immediate_of_type{
             using overloads = detail::pack<detail::pack<T>,detail::pack<skip_immediate_t>>;
-            static detail::component_feedback<sizeof(T)> encode(bytes& b,T imm){
+            static detail::encode_feedback_single<ComponentType::IMMEDIATE,sizeof(T)> encode(bytes& b,T imm){
                 b.appendl(imm);
                 return {};
             }
-            static detail::component_feedback<sizeof(T)> encode(bytes& b,skip_immediate_t){
+            static detail::encode_feedback_single<ComponentType::IMMEDIATE,sizeof(T)> encode(bytes& b,skip_immediate_t){
                 b.resb(sizeof(T));
                 return {};
             }
         };
     }
-    template<typename T>
-    struct pred_is_immediate{
-        constexpr static bool value = false;
-    };
-    template<typename T>
-    struct pred_is_immediate<detail::immediate_of_type<T>>{
-        constexpr static bool value = true;
-    };
     template<width w>
     using immediate = detail::immediate_of_type<std::conditional_t<w == width::W64,wvs<width::W32>,wv<w>>>;
     template<width w>
@@ -226,14 +213,19 @@ namespace x86{
     constexpr inline std::byte MODRM_R_DST = 0xff_b;
     constexpr inline std::byte MODRM_R_SRC = 0xfe_b;
     namespace detail{
+        template<width dw>
+        using modrm_encode_result_t = encode_feedback<
+            encoded_component<ComponentType::MODRM,1uz>,
+            encoded_component<ComponentType::DISPLACEMENT,width_to_byte_count(dw)>
+        >;
         template<std::byte rmreg,width dw>
         struct modrm_with_disp{
-            static detail::component_feedback<1uz+width_to_byte_count(dw)> encode(bytes& b,std::byte mod,std::byte rm,displacement<dw> disp){
+            static modrm_encode_result_t<dw> encode(bytes& b,std::byte mod,std::byte rm,displacement<dw> disp){
                 b.append((mod<<6uz) | (rmreg<<3uz) | rm);
                 b.appendl(disp.amount);
                 return {};
             }
-            static detail::component_feedback<1uz+width_to_byte_count(dw)> encode(bytes& b,std::byte mod,std::byte rm,skip_displacement_t<dw>){
+            static modrm_encode_result_t<dw> encode(bytes& b,std::byte mod,std::byte rm,skip_displacement_t<dw>){
                 b.append((mod<<6uz) | (rmreg<<3uz) | rm);
                 b.resb(width_to_byte_count(dw));
                 return {};
@@ -241,12 +233,12 @@ namespace x86{
         };
         template<width dw>
         struct modrm_rdst_with_disp{
-            static detail::component_feedback<1uz+width_to_byte_count(dw)> encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm,displacement<dw> disp){
+            static modrm_encode_result_t<dw> encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm,displacement<dw> disp){
                 b.append((mod<<6uz) | (rmreg<<3uz) | rm);
                 b.appendl(disp.amount);
                 return {};
             }
-            static detail::component_feedback<1uz+width_to_byte_count(dw)> encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm,skip_displacement_t<dw>){
+            static modrm_encode_result_t<dw> encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm,skip_displacement_t<dw>){
                 b.append((mod<<6uz) | (rmreg<<3uz) | rm);
                 b.resb(width_to_byte_count(dw));
                 return {};
@@ -254,12 +246,12 @@ namespace x86{
         };
         template<width dw>
         struct modrm_rsrc_with_disp{
-            static detail::component_feedback<1uz+width_to_byte_count(dw)> encode(bytes& b,std::byte mod,std::byte rm,displacement<dw> disp,std::byte rmreg){
+            static modrm_encode_result_t<dw> encode(bytes& b,std::byte mod,std::byte rm,displacement<dw> disp,std::byte rmreg){
                 b.append((mod<<6uz) | (rmreg<<3uz) | rm);
                 b.appendl(disp.amount);
                 return {};
             }
-            static detail::component_feedback<1uz+width_to_byte_count(dw)> encode(bytes& b,std::byte mod,std::byte rm,skip_displacement_t<dw>,std::byte rmreg){
+            static modrm_encode_result_t<dw> encode(bytes& b,std::byte mod,std::byte rm,skip_displacement_t<dw>,std::byte rmreg){
                 b.append((mod<<6uz) | (rmreg<<3uz) | rm);
                 b.resb(width_to_byte_count(dw));
                 return {};
@@ -279,7 +271,7 @@ namespace x86{
         using detail::modrm_with_disp<rmreg,width::W8>::encode;
         using detail::modrm_with_disp<rmreg,width::W16>::encode;
         using detail::modrm_with_disp<rmreg,width::W32>::encode;
-        static detail::component_feedback<1uz> encode(bytes& b,std::byte mod,std::byte rm){
+        static detail::encode_feedback_single<ComponentType::MODRM,1uz> encode(bytes& b,std::byte mod,std::byte rm){
             b.append((mod<<6uz) | (rmreg<<3uz) | rm);
             return {};
         }
@@ -297,7 +289,7 @@ namespace x86{
         using detail::modrm_rdst_with_disp<width::W8>::encode;
         using detail::modrm_rdst_with_disp<width::W16>::encode;
         using detail::modrm_rdst_with_disp<width::W32>::encode;
-        static detail::component_feedback<1uz> encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm){
+        static detail::encode_feedback_single<ComponentType::MODRM,1uz> encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm){
             b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
             return {};
         }
@@ -315,7 +307,7 @@ namespace x86{
         using detail::modrm_rsrc_with_disp<width::W8>::encode;
         using detail::modrm_rsrc_with_disp<width::W16>::encode;
         using detail::modrm_rsrc_with_disp<width::W32>::encode;
-        static detail::component_feedback<1uz> encode(bytes& b,std::byte mod,std::byte rm,std::byte rmreg){
+        static detail::encode_feedback_single<ComponentType::MODRM,1uz> encode(bytes& b,std::byte mod,std::byte rm,std::byte rmreg){
             b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
             return {};
         }
@@ -337,7 +329,7 @@ namespace x86{
         template<typename Comp,typename Rest,typename ...Argv,typename ...RestArgv>
         struct encode_comp_sig<Comp,Rest,pack<pack<Argv...>,pack<RestArgv...>>>{
             static auto encode(bytes& b,Argv ...a,RestArgv ...r)
-            -> encode_feedback_prepend_t<Comp,decltype(Comp::encode(b,static_cast<Argv>(a)...)),decltype(Rest::encode(b,static_cast<RestArgv>(r)...))>{
+            -> encode_feedback_concat_t<decltype(Comp::encode(b,static_cast<Argv>(a)...)),decltype(Rest::encode(b,static_cast<RestArgv>(r)...))>{
                 Comp::encode(b,static_cast<Argv>(a)...);
                 Rest::encode(b,static_cast<RestArgv>(r)...);
                 return {};
@@ -507,7 +499,7 @@ namespace x86{
                 buf.append(0xE8_b);
                 buf.appendl(rel);
             }
-            using near_abs = RegularLongInstructionEncodings<width_agnostic_opcode<0xFF_b>,modrm<2_b>>;
+            using near_abs = RegularLongInstructionEncodings<opcode_nr<0xFF_b>,modrm<2_b>>;
         };
         struct ret{
             constexpr static void near(bytes& buf){
