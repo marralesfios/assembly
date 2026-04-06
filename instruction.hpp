@@ -427,6 +427,8 @@ namespace x86{
         using reify_for_32bit = InstructionEncoding<rie_reify_width_t<C,width::W32>...>;
         template<typename ...C>
         using reify_for_64bit = InstructionEncoding<insert_rex_prefix_t<rex::W,rie_reify_width_t<C,width::W64>>...>;
+        template<typename ...C>
+        using reify_for_64bitonly = InstructionEncoding<rie_reify_width_t<C,width::W64>...>;
     }
     template<typename Ie8s,typename ...C>
     using RegularInstructionEncodings = InstructionEncodings<detail::reify_for_8bit<Ie8s,C...>,detail::reify_for_16bit<C...>,detail::reify_for_32bit<C...>,detail::reify_for_64bit<C...>>;
@@ -437,6 +439,9 @@ namespace x86{
     // only 32 & 64 bit versions, like movzx from 16-bit (or movzw* in AT&T syntax)
     template<typename ...C>
     using RegularLongInstructionEncodings = InstructionEncodings<void,void,detail::reify_for_32bit<C...>,detail::reify_for_64bit<C...>>;
+    // only 32-bit version for IA-32, only 64-bit version for Intel 64, like absolute jumps.
+    template<typename ...C>
+    using RegularArchitectureWidthInstructionEncodings = InstructionEncodings<void,void,detail::reify_for_32bit<C...>,detail::reify_for_64bitonly<C...>>;
     namespace instructions{
         namespace detail{
             template<std::byte base>
@@ -491,7 +496,7 @@ namespace x86{
                 buf.append(0xE8_b);
                 buf.appendl(rel);
             }
-            using near_abs = RegularLongInstructionEncodings<opcode_nr<0xFF_b>,modrm<2_b>>;
+            using near_abs = RegularArchitectureWidthInstructionEncodings<opcode_nr<0xFF_b>,modrm<2_b>>;
         };
         struct ret{
             constexpr static void near(bytes& buf){
