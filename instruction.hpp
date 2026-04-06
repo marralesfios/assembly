@@ -312,14 +312,6 @@ namespace x86{
             return {};
         }
     };
-    template<typename T>
-    struct pred_is_modrm{
-        constexpr static bool value = false;
-    };
-    template<std::byte b>
-    struct pred_is_modrm<modrm<b>>{
-        constexpr static bool value = true;
-    };
     namespace detail{
         // not type_identity_t! we use type_identity so we are a struct with a ::type member instead of a typedef
         template<typename T,typename U>
