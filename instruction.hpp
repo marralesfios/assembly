@@ -123,29 +123,29 @@ namespace x86{
         constexpr inline std::size_t offset_of_first_v = offset_of_first<t,Ec...>::value;
     }
     template<typename ...Ec>
-    struct encode_feedback;
+    struct instruction_layout;
     template<ComponentType ...comps,std::size_t ...sizes>
-    struct encode_feedback<encoded_component<comps,sizes>...>{
+    struct instruction_layout<encoded_component<comps,sizes>...>{
         constexpr static std::size_t total_size = (... + sizes);
         template<ComponentType C>
         constexpr static std::size_t offset_of_first = detail::offset_of_first_v<C,encoded_component<comps,sizes>...>;
     };
     template<typename C,typename D>
-    struct encode_feedback_concat{};
+    struct instruction_layout_concat{};
     template<typename ...Cs,typename ...Ds>
-    struct encode_feedback_concat<encode_feedback<Cs...>,encode_feedback<Ds...>>{
-        using type = encode_feedback<Cs...,Ds...>;
+    struct instruction_layout_concat<instruction_layout<Cs...>,instruction_layout<Ds...>>{
+        using type = instruction_layout<Cs...,Ds...>;
     };
     template<typename C,typename D>
-    using encode_feedback_concat_t = encode_feedback_concat<C,D>::type;
+    using instruction_layout_concat_t = instruction_layout_concat<C,D>::type;
     namespace detail{
         template<ComponentType t,std::size_t n>
-        using encode_feedback_single = encode_feedback<encoded_component<t,n>>;
+        using instruction_layout_single = instruction_layout<encoded_component<t,n>>;
     }
     template<std::byte rexb,std::byte ...op>
     struct opcode{
         using overloads = detail::pack<detail::pack<>>;
-        static detail::encode_feedback_single<ComponentType::OPCODE,(rexb==0_b?0uz:1uz)+sizeof...(op)> encode(bytes& b){
+        static detail::instruction_layout_single<ComponentType::OPCODE,(rexb==0_b?0uz:1uz)+sizeof...(op)> encode(bytes& b){
             if constexpr(rexb != 0_b){
                 b.append(rexb | 0b0100'0000_b);
             }
@@ -158,7 +158,7 @@ namespace x86{
     template<std::byte rexb,std::byte op>
     struct opcode_plusr{
         using overloads = detail::pack<detail::pack<std::byte>>;
-        static detail::encode_feedback_single<ComponentType::OPCODE,rexb==0_b?1uz:2uz> encode(bytes& b,std::byte r){
+        static detail::instruction_layout_single<ComponentType::OPCODE,rexb==0_b?1uz:2uz> encode(bytes& b,std::byte r){
             if constexpr(rexb != 0_b){
                 b.append(rexb | 0b0100'0000_b);
             }
@@ -171,7 +171,7 @@ namespace x86{
     template<std::byte pref>
     struct prefix{
         using overloads = detail::pack<detail::pack<>>;
-        static detail::encode_feedback_single<ComponentType::PREFIX,1uz> encode(bytes& b){
+        static detail::instruction_layout_single<ComponentType::PREFIX,1uz> encode(bytes& b){
             b.append(pref);
             return {};
         }
@@ -184,11 +184,11 @@ namespace x86{
         template<typename T>
         struct immediate_of_type{
             using overloads = detail::pack<detail::pack<T>,detail::pack<skip_immediate_t>>;
-            static detail::encode_feedback_single<ComponentType::IMMEDIATE,sizeof(T)> encode(bytes& b,T imm){
+            static detail::instruction_layout_single<ComponentType::IMMEDIATE,sizeof(T)> encode(bytes& b,T imm){
                 b.appendl(imm);
                 return {};
             }
-            static detail::encode_feedback_single<ComponentType::IMMEDIATE,sizeof(T)> encode(bytes& b,skip_immediate_t){
+            static detail::instruction_layout_single<ComponentType::IMMEDIATE,sizeof(T)> encode(bytes& b,skip_immediate_t){
                 b.resb(sizeof(T));
                 return {};
             }
@@ -214,7 +214,7 @@ namespace x86{
     constexpr inline std::byte MODRM_R_SRC = 0xfe_b;
     namespace detail{
         template<width dw>
-        using modrm_encode_result_t = encode_feedback<
+        using modrm_encode_result_t = instruction_layout<
             encoded_component<ComponentType::MODRM,1uz>,
             encoded_component<ComponentType::DISPLACEMENT,width_to_byte_count(dw)>
         >;
@@ -271,7 +271,7 @@ namespace x86{
         using detail::modrm_with_disp<rmreg,width::W8>::encode;
         using detail::modrm_with_disp<rmreg,width::W16>::encode;
         using detail::modrm_with_disp<rmreg,width::W32>::encode;
-        static detail::encode_feedback_single<ComponentType::MODRM,1uz> encode(bytes& b,std::byte mod,std::byte rm){
+        static detail::instruction_layout_single<ComponentType::MODRM,1uz> encode(bytes& b,std::byte mod,std::byte rm){
             b.append((mod<<6uz) | (rmreg<<3uz) | rm);
             return {};
         }
@@ -289,7 +289,7 @@ namespace x86{
         using detail::modrm_rdst_with_disp<width::W8>::encode;
         using detail::modrm_rdst_with_disp<width::W16>::encode;
         using detail::modrm_rdst_with_disp<width::W32>::encode;
-        static detail::encode_feedback_single<ComponentType::MODRM,1uz> encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm){
+        static detail::instruction_layout_single<ComponentType::MODRM,1uz> encode(bytes& b,std::byte rmreg,std::byte mod,std::byte rm){
             b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
             return {};
         }
@@ -307,7 +307,7 @@ namespace x86{
         using detail::modrm_rsrc_with_disp<width::W8>::encode;
         using detail::modrm_rsrc_with_disp<width::W16>::encode;
         using detail::modrm_rsrc_with_disp<width::W32>::encode;
-        static detail::encode_feedback_single<ComponentType::MODRM,1uz> encode(bytes& b,std::byte mod,std::byte rm,std::byte rmreg){
+        static detail::instruction_layout_single<ComponentType::MODRM,1uz> encode(bytes& b,std::byte mod,std::byte rm,std::byte rmreg){
             b.appendl((mod<<6uz) | (rmreg<<3uz) | rm);
             return {};
         }
@@ -321,7 +321,7 @@ namespace x86{
         template<typename Comp,typename Rest,typename ...Argv,typename ...RestArgv>
         struct encode_comp_sig<Comp,Rest,pack<pack<Argv...>,pack<RestArgv...>>>{
             static auto encode(bytes& b,Argv ...a,RestArgv ...r)
-            -> encode_feedback_concat_t<decltype(Comp::encode(b,static_cast<Argv>(a)...)),decltype(Rest::encode(b,static_cast<RestArgv>(r)...))>{
+            -> instruction_layout_concat_t<decltype(Comp::encode(b,static_cast<Argv>(a)...)),decltype(Rest::encode(b,static_cast<RestArgv>(r)...))>{
                 Comp::encode(b,static_cast<Argv>(a)...);
                 Rest::encode(b,static_cast<RestArgv>(r)...);
                 return {};
@@ -338,7 +338,7 @@ namespace x86{
     template<typename ...C>
     struct InstructionEncoding{
         using overloads = detail::pack<detail::pack<>>;
-        static encode_feedback<> encode(bytes&){ return {}; }
+        static instruction_layout<> encode(bytes&){ return {}; }
     };
     template<typename Comp,typename ...Rest>
     struct InstructionEncoding<Comp,Rest...> : detail::encode_comp<Comp,InstructionEncoding<Rest...>,detail::outer_product_t<typename Comp::overloads,typename InstructionEncoding<Rest...>::overloads,detail::tpair>>{
