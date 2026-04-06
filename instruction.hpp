@@ -317,9 +317,9 @@ namespace x86{
         template<typename T,typename U>
         using tpair = std::type_identity<pack<T,U>>;
         template<typename Comp,typename Rest,typename Packs>
-        struct encode_comp_sig{};
+        struct encode_signature{};
         template<typename Comp,typename Rest,typename ...Argv,typename ...RestArgv>
-        struct encode_comp_sig<Comp,Rest,pack<pack<Argv...>,pack<RestArgv...>>>{
+        struct encode_signature<Comp,Rest,pack<pack<Argv...>,pack<RestArgv...>>>{
             static auto encode(bytes& b,Argv ...a,RestArgv ...r)
             -> instruction_layout_concat_t<decltype(Comp::encode(b,static_cast<Argv>(a)...)),decltype(Rest::encode(b,static_cast<RestArgv>(r)...))>{
                 Comp::encode(b,static_cast<Argv>(a)...);
@@ -328,10 +328,10 @@ namespace x86{
             }
         };
         template<typename Comp,typename Rest,typename Combop>
-        struct encode_comp{};
+        struct encode_component{};
         template<typename Comp,typename Rest,typename ...Combos>
-        struct encode_comp<Comp,Rest,pack<Combos...>> : encode_comp_sig<Comp,Rest,Combos>...{
-            using encode_comp_sig<Comp,Rest,Combos>::encode...;
+        struct encode_component<Comp,Rest,pack<Combos...>> : encode_signature<Comp,Rest,Combos>...{
+            using encode_signature<Comp,Rest,Combos>::encode...;
         };
     }
     
@@ -341,7 +341,7 @@ namespace x86{
         static instruction_layout<> encode(bytes&){ return {}; }
     };
     template<typename Comp,typename ...Rest>
-    struct InstructionEncoding<Comp,Rest...> : detail::encode_comp<Comp,InstructionEncoding<Rest...>,detail::outer_product_t<typename Comp::overloads,typename InstructionEncoding<Rest...>::overloads,detail::tpair>>{
+    struct InstructionEncoding<Comp,Rest...> : detail::encode_component<Comp,InstructionEncoding<Rest...>,detail::outer_product_t<typename Comp::overloads,typename InstructionEncoding<Rest...>::overloads,detail::tpair>>{
         using overloads = detail::outer_product_t<typename Comp::overloads,typename InstructionEncoding<Rest...>::overloads,detail::pack_concat>;
     };
 
