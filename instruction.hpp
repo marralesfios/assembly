@@ -534,6 +534,7 @@ namespace x86{
         struct jmp{
             using rel = RegularShortInstructionEncodings<opcode_substitution<0xEB_b>,opcode_nr<0xE9_b>,rie_variable_width<signed_immediate>>;
         };
-        using imul = RegularInstructionEncodings<opcode_substitution<0xF6_b>,opcode_nr<0xF7_b>,modrm<4_b>>;
+        using mul = RegularInstructionEncodings<opcode_substitution<0xF6_b>,opcode_nr<0xF7_b>,modrm<4_b>>;
+        using imul = RegularInstructionEncodings<opcode_substitution<0xF6_b>,opcode_nr<0xF7_b>,modrm<5_b>>;
     }
 }
